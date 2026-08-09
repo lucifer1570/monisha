@@ -185,12 +185,9 @@ async function fetchList() {
         }
         return [];
     } catch (error) {
-        if (error.response && error.response.status === 403) {
-            console.error("[FETCH LIST 403] Axios blocked. Attempting Puppeteer fallback...");
-            return await fetchListPuppeteer();
-        }
-        console.error("[FETCH LIST ERROR]", error.message);
-        return null;
+        console.error("[FETCH LIST ERROR]", error.message, error.response ? `Status: ${error.response.status}` : "");
+        console.error("Attempting Puppeteer fallback due to fetch error...");
+        return await fetchListPuppeteer();
     }
 }
 
@@ -202,20 +199,22 @@ async function fetchListPuppeteer() {
                 args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
             });
         }
-        const pages = await sharedBrowser.pages();
-        const page = pages.length > 0 ? pages[0] : await sharedBrowser.newPage();
-        
-        // If it's a new page or not on the right domain, navigate first
-        const currentUrl = page.url();
-        if (!currentUrl.includes("goaokk.com")) {
-            await page.goto("https://goaokk.com", { waitUntil: 'networkidle2', timeout: 30000 });
-        }
+        const page = await sharedBrowser.newPage();
+        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36");
+        await page.goto("https://goaokk.com", { waitUntil: 'networkidle2', timeout: 30000 });
         
         const data = await page.evaluate(async (url) => {
-            const resp = await fetch(url);
+            const resp = await fetch(url, {
+                headers: {
+                    "Accept": "application/json, text/plain, */*",
+                    "Origin": "https://goaokk.com",
+                    "Referer": "https://goaokk.com/"
+                }
+            });
             return await resp.json();
         }, DRAW_URL);
         
+        await page.close().catch(() => {});
         if (data && data.data && data.data.list) {
             return data.data.list;
         }
