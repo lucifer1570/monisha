@@ -514,21 +514,36 @@ async function captchaLogin(userId, chatId, phone, password, bot, logBoth) {
      try {
          browser = await puppeteer.launch({
              headless: true, 
-             args: ['--no-sandbox', '--disable-setuid-sandbox', '--single-process', '--disable-gpu']
+             args: [
+                 '--no-sandbox', 
+                 '--disable-setuid-sandbox', 
+                 '--single-process', 
+                 '--disable-gpu',
+                 '--disable-dev-shm-usage',
+                 '--disable-blink-features=AutomationControlled'
+             ]
          });
          const page = await browser.newPage();
          await page.setDefaultNavigationTimeout(90000); 
          await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
- 
+
+         await page.evaluateOnNewDocument(() => {
+             Object.defineProperty(navigator, 'webdriver', { get: () => false });
+         });
+
          let capturedToken = null;
          await page.setRequestInterception(true);
          page.on('request', (req) => {
-             if (req.url().includes('GetBalance') && req.headers()['authorization']) {
-                 capturedToken = req.headers()['authorization'].replace(/^Bearer\s+/i, "");
+             const headers = req.headers();
+             const auth = headers['authorization'] || headers['Authorization'];
+             if (auth) {
+                 const tokenClean = auth.replace(/^Bearer\s+/i, "");
+                 if (tokenClean.length > 20) {
+                     capturedToken = tokenClean;
+                 }
              }
              req.continue();
-         
-        });
+         });
         
         // Navigate to login page
        // Navigate to login page
