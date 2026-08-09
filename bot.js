@@ -1600,6 +1600,15 @@ function startBot(){
     bot=new TelegramBot(BOT_TOKEN,{polling:{interval:1000,autoStart:true,params:{timeout:30}}});
     bot.on("polling_error",err=>{
         const msg = err?.message || String(err);
+        if (msg.includes("409") || msg.includes("Conflict")) {
+            console.warn("Telegram conflict detected (another instance running). Pausing polling for 10 seconds...");
+            setTimeout(() => {
+                try {
+                    bot.stopPolling().then(() => bot.startPolling());
+                } catch (e) {}
+            }, 10000);
+            return;
+        }
         if (msg.includes("ECONNRESET") || msg.includes("EFATAL") || msg.includes("socket hang up")) {
             recoverPolling(err);
             return;
