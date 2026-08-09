@@ -63,6 +63,7 @@ let autobetCfg     = {};
 let autobetState   = {};
 let profitTrack    = {};
 let GLOBAL_TOKEN   = "";
+let sharedBrowser  = null;
 let userTokens     = {}; 
 let userStates     = {};
 let activeBets     = {};
@@ -162,23 +163,69 @@ async function logBoth(chatId, msg, isError = false) {
 //  HELPERS
 // ============================================================
 async function fetchList() {
+    const headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://goaokk.com",
+        "Referer": "https://goaokk.com/",
+        "Ar-Origin": "https://goaokk.com",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+        "sec-ch-ua": '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "cross-site",
+    };
+
     try {
-        const response = await axios.get(DRAW_URL, {
-            headers: {
-                "Accept": "application/json, text/plain, */*",
-                "Origin": "https://goaokk.com",
-                "Referer": "https://goaokk.com/",
-                "Ar-Origin": "https://goaokk.com",
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36"
-            },
-            timeout: 10000
-        });
+        const response = await axios.get(DRAW_URL, { headers, timeout: 10000 });
         if (response.data && response.data.data && response.data.data.list) {
             return response.data.data.list;
         }
         return [];
     } catch (error) {
+        if (error.response && error.response.status === 403) {
+            console.error("[FETCH LIST 403] Axios blocked. Attempting Puppeteer fallback...");
+            return await fetchListPuppeteer();
+        }
         console.error("[FETCH LIST ERROR]", error.message);
+        return null;
+    }
+}
+
+async function fetchListPuppeteer() {
+    try {
+        if (!sharedBrowser) {
+            sharedBrowser = await puppeteer.launch({
+                headless: "new",
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            });
+        }
+        const pages = await sharedBrowser.pages();
+        const page = pages.length > 0 ? pages[0] : await sharedBrowser.newPage();
+        
+        // If it's a new page or not on the right domain, navigate first
+        const currentUrl = page.url();
+        if (!currentUrl.includes("goaokk.com")) {
+            await page.goto("https://goaokk.com", { waitUntil: 'networkidle2', timeout: 30000 });
+        }
+        
+        const data = await page.evaluate(async (url) => {
+            const resp = await fetch(url);
+            return await resp.json();
+        }, DRAW_URL);
+        
+        if (data && data.data && data.data.list) {
+            return data.data.list;
+        }
+        return [];
+    } catch (err) {
+        console.error("[PUPPETEER FETCH ERR]", err.message);
+        if (sharedBrowser) {
+            await sharedBrowser.close().catch(() => {});
+            sharedBrowser = null;
+        }
         return null;
     }
 }
