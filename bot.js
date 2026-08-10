@@ -163,9 +163,11 @@ async function logBoth(chatId, msg, isError = false) {
 // ============================================================
 async function fetchList() {
     try {
-        const response = await axios.get(DRAW_URL, {
+        const response = await axios.get(DRAW_URL + "?_t=" + Date.now(), {
             headers: {
                 "Accept": "application/json, text/plain, */*",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
                 "Origin": "https://goaokk.com",
                 "Referer": "https://goaokk.com/",
                 "Ar-Origin": "https://goaokk.com",
@@ -1010,7 +1012,7 @@ async function runPredict(userId, chatId) {
     }
 
     const list = await fetchList();
-    if(!list) return setTimeout(()=>runPredict(userId,chatId), 15000);
+    if(!list || list.length === 0 || !list[0].issueNumber) return setTimeout(()=>runPredict(userId,chatId), 5000);
 
     const next = (BigInt(list[0].issueNumber)+1n).toString();
     if(sentPeriods[userId].has(next)) return setTimeout(()=>runPredict(userId,chatId), 2000);
@@ -1190,7 +1192,7 @@ async function checkResult(userId, chatId, target, predicted, predType, betPlace
             await logBoth(chatId, "⏱ Target period not available yet. Retrying the same prediction...");
             return;
         }
-        const list = await fetchList(); if (!list) return;
+        const list = await fetchList(); if (!list || list.length === 0 || !list[0].issueNumber) return;
         if (BigInt(list[0].issueNumber) < BigInt(target)) return;
 
         const res = list.find(i => String(i.issueNumber) === String(target));
